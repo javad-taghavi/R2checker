@@ -9,43 +9,29 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-sources = [
-    "https://raw.githubusercontent.com/aiboboxx/v2rayfree/main/index.html"
-]
-
-def search_github_v2ray_links():
-    query = "v2ray in:file language:JSON"
-    url = f"https://api.github.com/search/code?q={query}&sort=indexed&order=desc&per_page=5"
-    headers = {"Accept": "application/vnd.github.v3+json"}
+def load_sources():
     try:
-        response = requests.get(url, headers=headers)
-        items = response.json().get("items", [])
-        for item in items:
-            raw_url = item["html_url"].replace("github.com", "raw.githubusercontent.com").replace("/blob", "")
-            sources.append(raw_url)
+        with open("configs/config.txt", "r") as f:
+            return [line.strip() for line in f if line.strip()]
     except Exception as e:
-        print("GitHub Search Error:", e)
+        print("Error loading config.txt:", e)
+        return []
 
-def fetch_configs():
+def fetch_configs(sources):
     links = []
     for url in sources:
         try:
             res = requests.get(url, headers=HEADERS, timeout=15)
             if res.status_code == 200:
-found = re.findall(r"(vmess://[^\s<>\"]+|vless://[^\s<>\"]+|trojan://[^\s<>\"]+|ss://[^\s<>\"]+)", res.text)
+                found = re.findall(r"(vmess://[^\s<>\"']+|vless://[^\s<>\"']+|trojan://[^\s<>\"']+|ss://[^\s<>\"']+)", res.text)
                 links.extend(found)
         except Exception as e:
             print(f"⚠️ Error fetching {url}: {e}")
     return list(set(links))
 
-def test_config(link):
-    try:
-        proc = subprocess.run(["bin/v2ray", "-test"], input=b"{}", stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
-        return proc.returncode == 0
-    except:
-        return False
-
 def send_to_telegram(text):
+    if not text.strip():
+        text = "هیچ کانفیگ سالمی پیدا نشد."
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": TELEGRAM_CHAT_ID, "text": text[:4096]}
     try:
@@ -55,6 +41,9 @@ def send_to_telegram(text):
         print("Telegram Error:", e)
 
 def upload_to_dropbox(content):
+    if not content.strip():
+        print("Dropbox: Nothing to upload.")
+        return
     url = "https://content.dropboxapi.com/2/files/upload"
     headers = {
         "Authorization": f"Bearer {DROPBOX_TOKEN}",
@@ -68,16 +57,13 @@ def upload_to_dropbox(content):
         print("Dropbox Error:", e)
 
 def main():
-    search_github_v2ray_links()
-    links = fetch_configs()
+    sources = load_sources()
+    links = fetch_configs(sources)
     print(f"Total found: {len(links)}")
-    working = []
-    for link in links:
-        if "vmess://" in link or "vless://" in link:
-            working.append(link)
+    working = links  # (در نسخه‌های بعدی می‌شه اینجا تست واقعی زد)
     with open("configs/working.txt", "w") as f:
         f.write("\n".join(working))
-    send_to_telegram("\n".join(working[:20]) or "هیچ کانفیگ سالمی پیدا نشد.")
+    send_to_telegram("\n".join(working[:20]))
     upload_to_dropbox("\n".join(working))
 
 if __name__ == "__main__":
