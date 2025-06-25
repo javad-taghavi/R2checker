@@ -49,7 +49,10 @@ def upload_to_dropbox(content):
     url = "https://content.dropboxapi.com/2/files/upload"
     headers = {
         "Authorization": f"Bearer {DROPBOX_TOKEN}",
-        "Dropbox-API-Arg": json.dumps({"path": f"/working_{datetime.now().strftime('%Y%m%d_%H%M')}.txt", "mode": "overwrite"}),
+        "Dropbox-API-Arg": json.dumps({
+            "path": f"/working_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+            "mode": "overwrite"
+        }),
         "Content-Type": "application/octet-stream"
     }
     try:
@@ -63,9 +66,11 @@ def main():
     links = fetch_configs(sources)
     print(f"Total found: {len(links)}")
     working = links  # (در نسخه‌های بعدی می‌شه اینجا تست واقعی زد)
+
     with open("configs/working.txt", "w") as f:
         f.write("\n".join(working))
-send_to_telegram(working)
+
+    send_to_telegram(working)
     upload_to_dropbox("\n".join(working))
 
 if __name__ == "__main__":
