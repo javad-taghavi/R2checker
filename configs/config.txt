@@ -1,1 +1,2 @@
 https://raw.githubusercontent.com/aiboboxx/v2rayfree/main/index.html
+https://raw.githubusercontent.com/miladtahanian/V2RayCFGDumper/main/config.txt
