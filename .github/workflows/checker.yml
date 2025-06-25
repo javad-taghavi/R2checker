@@ -1,0 +1,37 @@
+name: V2Ray Checker
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install tools
+        run: |
+          sudo apt update
+          sudo apt install curl wget unzip -y
+          mkdir -p bin
+          wget -O bin/v2ray.zip https://github.com/v2fly/v2ray-core/releases/latest/download/v2ray-linux-64.zip
+          unzip bin/v2ray.zip -d bin/
+          chmod +x bin/v2ray bin/v2ctl
+          echo "$(pwd)/bin" >> $GITHUB_PATH
+
+      - name: Run checker
+        run: python3 scripts/check.py
