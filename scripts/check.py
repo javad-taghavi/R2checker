@@ -29,16 +29,18 @@ def fetch_configs(sources):
             print(f"⚠️ Error fetching {url}: {e}")
     return list(set(links))
 
-def send_to_telegram(text):
-    if not text.strip():
-        text = "هیچ کانفیگ سالمی پیدا نشد."
+def send_to_telegram(text_list):
+    if not text_list:
+        text_list = ["هیچ کانفیگ سالمی پیدا نشد."]
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": text[:4096]}
-    try:
-        r = requests.post(url, data=data)
-        print("Telegram:", r.status_code)
-    except Exception as e:
-        print("Telegram Error:", e)
+
+    for i, config in enumerate(text_list[:50]):  # حداکثر 50 تا بفرسته برای جلوگیری از اسپم
+        data = {"chat_id": TELEGRAM_CHAT_ID, "text": f"💠 کانفیگ #{i+1}:\n\n{config}"}
+        try:
+            r = requests.post(url, data=data)
+            print(f"Telegram [{i+1}]:", r.status_code)
+        except Exception as e:
+            print(f"Telegram Error [{i+1}]:", e)
 
 def upload_to_dropbox(content):
     if not content.strip():
@@ -63,7 +65,7 @@ def main():
     working = links  # (در نسخه‌های بعدی می‌شه اینجا تست واقعی زد)
     with open("configs/working.txt", "w") as f:
         f.write("\n".join(working))
-    send_to_telegram("\n".join(working[:20]))
+send_to_telegram(working)
     upload_to_dropbox("\n".join(working))
 
 if __name__ == "__main__":
