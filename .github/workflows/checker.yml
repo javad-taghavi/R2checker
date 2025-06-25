@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install tools
+      - name: Install tools and Python packages
         run: |
           sudo apt update
           sudo apt install curl wget unzip -y
@@ -32,6 +32,7 @@ jobs:
           unzip bin/v2ray.zip -d bin/
           chmod +x bin/v2ray
           echo "$(pwd)/bin" >> $GITHUB_PATH
+          pip install requests
 
       - name: Run checker
         run: python3 scripts/check.py
