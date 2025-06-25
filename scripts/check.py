@@ -1,156 +1,84 @@
 import requests, base64, subprocess, json, os, re
+from datetime import datetime
 
-TELEGRAM_CONFIG_PATH = "config.txt"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+DROPBOX_TOKEN = os.getenv("DROPBOX_ACCESS_TOKEN")
 
-def fetch_from_github_search():
-    configs = []
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+sources = [
+    "https://raw.githubusercontent.com/aiboboxx/v2rayfree/main/index.html"
+]
+
+def search_github_v2ray_links():
+    query = "v2ray in:file language:JSON"
+    url = f"https://api.github.com/search/code?q={query}&sort=indexed&order=desc&per_page=5"
+    headers = {"Accept": "application/vnd.github.v3+json"}
     try:
-        search_url = "https://api.github.com/search/code"
-        headers = {"Accept": "application/vnd.github.v3+json"}
-        query = "v2ray vmess in:file extension:txt language:text"
-        params = {"q": query, "sort": "indexed", "order": "desc", "per_page": 5}
-        r = requests.get(search_url, headers=headers, params=params, timeout=10)
-        items = r.json().get("items", [])
+        response = requests.get(url, headers=headers)
+        items = response.json().get("items", [])
         for item in items:
-            raw_url = item["html_url"].replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
-            print(f"🔍 GitHub file: {raw_url}")
-            res = requests.get(raw_url, timeout=10)
-            matches = re.findall(r"(vmess|vless|trojan|ss):\/\/[^\s<>\"']+", res.text)
-            configs.extend(matches)
+            raw_url = item["html_url"].replace("github.com", "raw.githubusercontent.com").replace("/blob", "")
+            sources.append(raw_url)
     except Exception as e:
-        print("❌ GitHub Search Error:", e)
-    return configs
+        print("GitHub Search Error:", e)
 
 def fetch_configs():
-    configs = []
-
-    configs.extend(fetch_from_github_search())
-
-    github_sources = [
-        "https://raw.githubusercontent.com/aiboboxx/v2rayfree/main/v2",
-        "https://raw.githubusercontent.com/Alvin9999/new-pac/master/v2ray/free-v2ray",
-        "https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub",
-    ]
-
-    for url in github_sources:
+    links = []
+    for url in sources:
         try:
-            r = requests.get(url, timeout=10)
-            r.raise_for_status()
-            matches = re.findall(r"(vmess|vless|trojan|ss):\/\/[^\s<>\"']+", r.text)
-            configs.extend(matches)
+            res = requests.get(url, headers=HEADERS, timeout=15)
+            if res.status_code == 200:
+                found = re.findall(r"(vmess|vless|trojan|ss)://[^\s<>\"]+", res.text)
+                links.extend(found)
         except Exception as e:
             print(f"⚠️ Error fetching {url}: {e}")
-
-    if os.path.exists(TELEGRAM_CONFIG_PATH):
-        with open(TELEGRAM_CONFIG_PATH, "r") as f:
-            configs.extend([line.strip() for line in f if any(proto in line for proto in ["vmess://", "vless://", "trojan://", "ss://"])])
-
-    return list(set(configs))
+    return list(set(links))
 
 def test_config(link):
-    if link.startswith("vmess://"):
-        try:
-            data = base64.b64decode(link[8:] + '==').decode()
-            obj = json.loads(data)
-            addr = obj["add"]
-            port = obj["port"]
-            uuid = obj["id"]
-            tls = obj.get("tls", "")
+    try:
+        proc = subprocess.run(["bin/v2ray", "-test"], input=b"{}", stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
+        return proc.returncode == 0
+    except:
+        return False
 
-            out_config = {
-                "protocol": "vmess",
-                "settings": {
-                    "vnext": [{
-                        "address": addr,
-                        "port": int(port),
-                        "users": [{ "id": uuid, "alterId": 0 }]
-                    }]
-                },
-                "streamSettings": {
-                    "security": tls
-                } if tls else {}
-            }
-
-            base_config = {
-                "log": { "loglevel": "warning" },
-                "inbounds": [{
-                    "port": 10808,
-                    "listen": "127.0.0.1",
-                    "protocol": "socks",
-                    "settings": { "auth": "noauth" }
-                }],
-                "outbounds": [out_config]
-            }
-
-            with open("temp_config.json", "w") as f:
-                json.dump(base_config, f)
-
-            v2 = subprocess.Popen(["v2ray", "-config", "temp_config.json"])
-            try:
-                result = subprocess.run(["curl", "--socks5", "127.0.0.1:10808", "-m", "10", "https://www.google.com"],
-                                        capture_output=True, timeout=12)
-                v2.kill()
-                return result.returncode == 0
-            except subprocess.TimeoutExpired:
-                v2.kill()
-        except:
-            pass
-    return False
-
-def send_to_telegram(file_path, bot_token, chat_id):
-    with open(file_path, 'rb') as f:
-        r = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/sendDocument",
-            data={"chat_id": chat_id},
-            files={"document": f}
-        )
+def send_to_telegram(text):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": text[:4096]}
+    try:
+        r = requests.post(url, data=data)
         print("Telegram:", r.status_code)
+    except Exception as e:
+        print("Telegram Error:", e)
 
-def upload_to_dropbox(file_path, token, path):
-    with open(file_path, 'rb') as f:
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/octet-stream",
-            "Dropbox-API-Arg": str({
-                "path": path,
-                "mode": "overwrite",
-                "mute": True
-            }).replace("'", '"')
-        }
-        r = requests.post(
-            "https://content.dropboxapi.com/2/files/upload",
-            headers=headers,
-            data=f.read()
-        )
+def upload_to_dropbox(content):
+    url = "https://content.dropboxapi.com/2/files/upload"
+    headers = {
+        "Authorization": f"Bearer {DROPBOX_TOKEN}",
+        "Dropbox-API-Arg": json.dumps({"path": f"/working_{datetime.now().strftime('%Y%m%d_%H%M')}.txt", "mode": "overwrite"}),
+        "Content-Type": "application/octet-stream"
+    }
+    try:
+        r = requests.post(url, headers=headers, data=content.encode("utf-8"))
         print("Dropbox:", r.status_code)
+    except Exception as e:
+        print("Dropbox Error:", e)
 
 def main():
-    configs = fetch_configs()
-    print(f"Total found: {len(configs)}")
-
+    search_github_v2ray_links()
+    links = fetch_configs()
+    print(f"Total found: {len(links)}")
     working = []
-    for i, cfg in enumerate(configs[:50]):
-        print(f"[{i+1}] Testing: {cfg[:60]}")
-        if test_config(cfg):
-            print("✅ OK")
-            working.append(cfg)
-        else:
-            print("❌ Fail")
-
-    os.makedirs("configs", exist_ok=True)
-    path = "configs/working.txt"
-    with open(path, "w") as f:
+    for link in links:
+        if "vmess://" in link or "vless://" in link:
+            working.append(link)
+    with open("configs/working.txt", "w") as f:
         f.write("\n".join(working))
-
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    dropbox_token = os.getenv("DROPBOX_ACCESS_TOKEN")
-
-    if bot_token and chat_id:
-        send_to_telegram(path, bot_token, chat_id)
-
-    if dropbox_token:
-        upload_to_dropbox(path, dropbox_token, "/configs/working.txt")
+    send_to_telegram("\n".join(working[:20]) or "هیچ کانفیگ سالمی پیدا نشد.")
+    upload_to_dropbox("\n".join(working))
 
 if __name__ == "__main__":
     main()
