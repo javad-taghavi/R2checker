@@ -32,7 +32,7 @@ def fetch_configs():
         try:
             res = requests.get(url, headers=HEADERS, timeout=15)
             if res.status_code == 200:
-                found = re.findall(r"(vmess|vless|trojan|ss)://[^\s<>\"]+", res.text)
+found = re.findall(r"(vmess://[^\s<>\"]+|vless://[^\s<>\"]+|trojan://[^\s<>\"]+|ss://[^\s<>\"]+)", res.text)
                 links.extend(found)
         except Exception as e:
             print(f"⚠️ Error fetching {url}: {e}")
