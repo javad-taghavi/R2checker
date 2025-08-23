@@ -36,3 +36,4 @@ jobs:
 
       - name: Run checker
         run: python3 scripts/check.py
+
